@@ -1,13 +1,7 @@
 'use client';
 import {useEffect,useState} from 'react';
 import {Grid,Card,CardContent,Typography,Box,LinearProgress,Stack,Chip,Alert} from '@mui/material';
-import {
-  FolderOpen,
-  Checklist,
-  CheckCircle,
-  PendingActions,
-  WarningAmber
-} from '@mui/icons-material';
+import {FolderKanban,Checklist,CheckCircle,PendingActions,WarningAmber} from '@mui/icons-material';
 import api from '../../../lib/api';
 const metrics=[['Active projects','activeProjects',FolderOpen],['Assigned tasks','assignedTasks',Checklist],['Completed tasks','completedTasks',CheckCircle],['Pending tasks','pendingTasks',PendingActions],['Overdue tasks','overdueTasks',WarningAmber]];
 export default function DashboardPage(){const [data,setData]=useState(null),[error,setError]=useState('');useEffect(()=>{api.get('/dashboard/summary').then(r=>setData(r.data.data)).catch(e=>setError(e.response?.data?.message||'Could not load dashboard'));},[]);
