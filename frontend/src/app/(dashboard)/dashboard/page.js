@@ -1,15 +1,84 @@
-'use client';
-import {useEffect,useState} from 'react';
-import {Grid,Card,CardContent,Typography,Box,LinearProgress,Stack,Chip,Alert} from '@mui/material';
-import {
-  FolderOpen,
-  Checklist,
-  CheckCircle,
-  PendingActions,
-  WarningAmber
-} from '@mui/icons-material';
-import api from '../../../lib/api';
-const metrics=[['Active projects','activeProjects',FolderOpen],['Assigned tasks','assignedTasks',Checklist],['Completed tasks','completedTasks',CheckCircle],['Pending tasks','pendingTasks',PendingActions],['Overdue tasks','overdueTasks',WarningAmber]];
-export default function DashboardPage(){const [data,setData]=useState(null),[error,setError]=useState('');useEffect(()=>{api.get('/dashboard/summary').then(r=>setData(r.data.data)).catch(e=>setError(e.response?.data?.message||'Could not load dashboard'));},[]);
- return <Box><Typography variant="h4">Dashboard</Typography><Typography color="text.secondary" sx={{mt:1,mb:3}}>Here's an overview of your team's delivery.</Typography>{error&&<Alert severity="error">{error}</Alert>}{!data?<Typography>Loading metrics…</Typography>:<><Grid container spacing={2}>{metrics.map(([label,key,Icon])=><Grid size={{xs:12,sm:6,lg:key==='overdueTasks'?12:3}} key={key}><Card><CardContent><Stack direction="row" justifyContent="space-between" alignItems="center"><Typography color="text.secondary" variant="body2">{label}</Typography><Icon color="primary"/></Stack><Typography variant="h4" sx={{mt:2}}>{data[key]}</Typography></CardContent></Card></Grid>)}</Grid><Card sx={{mt:3}}><CardContent><Typography variant="h6" sx={{mb:2}}>Project progress</Typography><Stack spacing={2.5}>{data.projectProgress.map(p=><Box key={p.id}><Stack direction="row" justifyContent="space-between" sx={{mb:1}}><Box><Typography fontWeight={700}>{p.name}</Typography><Typography variant="caption" color="text.secondary">{p.completed} of {p.total} tasks completed</Typography></Box><Chip size="small" label={`${p.progress}%`}/></Stack><LinearProgress variant="determinate" value={p.progress} sx={{height:8,borderRadius:8}}/></Box>)}{!data.projectProgress.length&&<Typography color="text.secondary">No projects available yet.</Typography>}</Stack></CardContent></Card></>}</Box>;
-}
+
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import compression from 'compression';
+import cookieParser from 'cookie-parser';
+import rateLimit from 'express-rate-limit';
+import pinoHttp from 'pino-http';
+
+import routes from './routes/index.js';
+import { notFound, errorHandler } from './middleware/errors.js';
+
+const app = express();
+
+app.disable('x-powered-by');
+
+// Allowed frontend origins
+const allowedOrigins = (
+  process.env.CLIENT_ORIGIN || 'http://localhost:3000'
+)
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+// Security headers
+app.use(helmet());
+
+// CORS configuration
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests without an Origin header (e.g. server-to-server)
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      console.error(`CORS blocked request from origin: ${origin}`);
+
+      return callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    optionsSuccessStatus: 204,
+  })
+);
+
+// Request middleware
+app.use(compression());
+app.use(express.json({ limit: '1mb' }));
+app.use(cookieParser());
+app.use(pinoHttp());
+
+// Authentication rate limiter
+app.use(
+  '/api/v1/auth',
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+  })
+);
+
+// Health check
+app.get('/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'teamflow-api',
+  });
+});
+
+// API routes
+app.use('/api/v1', routes);
+
+// Error handling
+app.use(notFound);
+app.use(errorHandler);
+
+export default app;
