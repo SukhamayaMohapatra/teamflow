@@ -1,0 +1,5 @@
+'use client';
+import {useEffect,useState} from 'react';
+import {Box,Typography,Card,CardContent,Stack,Avatar,Chip,Alert} from '@mui/material';
+import api from '../../../lib/api';
+export default function TeamPage(){const [users,setUsers]=useState([]),[error,setError]=useState('');useEffect(()=>{api.get('/users').then(r=>setUsers(r.data.data)).catch(e=>setError(e.response?.data?.message||'Unable to load team members'));},[]);return <Box><Typography variant="h4" sx={{mb:1}}>Team members</Typography><Typography color="text.secondary" sx={{mb:3}}>People who can be assigned to projects and tasks.</Typography>{error&&<Alert severity="error">{error}</Alert>}<Stack spacing={1.5}>{users.map(u=><Card key={u._id}><CardContent><Stack direction="row" spacing={2} alignItems="center"><Avatar>{u.name?.[0]}</Avatar><Box sx={{flexGrow:1}}><Typography fontWeight={700}>{u.name}</Typography><Typography color="text.secondary" variant="body2">{u.email}</Typography></Box><Chip size="small" label={u.role}/></Stack></CardContent></Card>)}{!users.length&&!error&&<Typography color="text.secondary">No team members found.</Typography>}</Stack></Box>;}

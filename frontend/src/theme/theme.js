@@ -1,0 +1,4 @@
+'use client';
+import { createTheme } from '@mui/material/styles';
+const theme=createTheme({palette:{mode:'light',primary:{main:'#4F46E5',dark:'#3730A3',light:'#818CF8'},secondary:{main:'#0F766E'},background:{default:'#F7F8FC',paper:'#FFFFFF'},text:{primary:'#172033',secondary:'#64748B'},success:{main:'#16A34A'},warning:{main:'#D97706'},error:{main:'#DC2626'}},shape:{borderRadius:12},typography:{fontFamily:'Inter, Arial, sans-serif',h4:{fontWeight:750,letterSpacing:'-0.04em'},h5:{fontWeight:700,letterSpacing:'-0.03em'},h6:{fontWeight:700},button:{textTransform:'none',fontWeight:650}},components:{MuiButton:{styleOverrides:{root:{borderRadius:10,minHeight:40,boxShadow:'none'}}},MuiCard:{styleOverrides:{root:{border:'1px solid #E9ECF3',boxShadow:'0 4px 20px rgba(15,23,42,0.035)'}}},MuiPaper:{styleOverrides:{rounded:{borderRadius:14}}},MuiTableCell:{styleOverrides:{head:{color:'#64748B',fontWeight:700,background:'#F8FAFC'}}}}});
+export default theme;
