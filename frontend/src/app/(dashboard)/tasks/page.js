@@ -18,9 +18,11 @@ import {
   DialogActions,
   TextField,
   MenuItem,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
 
-import { Add } from '@mui/icons-material';
+import { Add, Edit, Delete } from '@mui/icons-material';
 
 import api from '../../../lib/api';
 
@@ -30,6 +32,8 @@ const initialForm = {
   project: '',
   assignedTo: '',
   priority: 'MEDIUM',
+  status: 'TODO',
+  progress: 0,
   dueDate: '',
 };
 
@@ -42,6 +46,19 @@ const taskStatuses = [
 
 const priorities = ['HIGH', 'MEDIUM', 'LOW'];
 
+const toDateTimeInput = (value) => {
+  if (!value) return '';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const localDate = new Date(
+    date.getTime() - date.getTimezoneOffset() * 60000
+  );
+
+  return localDate.toISOString().slice(0, 16);
+};
+
 export default function TasksPage() {
   const [items, setItems] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -51,21 +68,26 @@ export default function TasksPage() {
   const [error, setError] = useState('');
 
   const [open, setOpen] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
+
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletingTask, setDeletingTask] = useState(null);
+
   const [form, setForm] = useState(initialForm);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
-  const load = useCallback(() => {
-    return api
-      .get('/tasks')
-      .then((response) => {
-        setItems(response.data.data);
-        setError('');
-      })
-      .catch((err) => {
-        setError(
-          err.response?.data?.message || 'Unable to load tasks'
-        );
-      });
+  const load = useCallback(async () => {
+    try {
+      const response = await api.get('/tasks');
+      setItems(response.data.data || []);
+      setError('');
+    } catch (err) {
+      setError(
+        err.response?.data?.message || 'Unable to load tasks'
+      );
+    }
   }, []);
 
   useEffect(() => {
@@ -75,18 +97,17 @@ export default function TasksPage() {
       .get('/auth/me')
       .then((response) => {
         const user = response.data.data.user;
-
         setRole(user.role);
 
         if (user.role === 'ADMIN') {
           api
             .get('/projects')
-            .then((result) => setProjects(result.data.data))
+            .then((result) => setProjects(result.data.data || []))
             .catch(() => {});
 
           api
             .get('/users')
-            .then((result) => setUsers(result.data.data))
+            .then((result) => setUsers(result.data.data || []))
             .catch(() => {});
         }
       })
@@ -94,15 +115,40 @@ export default function TasksPage() {
   }, [load]);
 
   const handleCreate = () => {
+    setEditMode(false);
+    setSelectedTask(null);
     setForm(initialForm);
     setError('');
     setOpen(true);
   };
 
+  const handleEdit = (task) => {
+    setEditMode(true);
+    setSelectedTask(task);
+
+    setForm({
+      title: task.title || '',
+      description: task.description || '',
+      project:
+        typeof task.project === 'string'
+          ? task.project
+          : task.project?._id || '',
+      assignedTo:
+        typeof task.assignedTo === 'string'
+          ? task.assignedTo
+          : task.assignedTo?._id || '',
+      priority: task.priority || 'MEDIUM',
+      status: task.status || 'TODO',
+      progress: Number(task.progress) || 0,
+      dueDate: toDateTimeInput(task.dueDate),
+    });
+
+    setError('');
+    setOpen(true);
+  };
+
   const handleClose = () => {
-    if (!saving) {
-      setOpen(false);
-    }
+    if (!saving) setOpen(false);
   };
 
   const submit = async (event) => {
@@ -112,21 +158,55 @@ export default function TasksPage() {
     setError('');
 
     try {
-      await api.post('/tasks', {
+      const payload = {
         ...form,
         dueDate: new Date(form.dueDate).toISOString(),
-      });
+        progress: Number(form.progress),
+      };
+
+      if (editMode && selectedTask) {
+        await api.patch(`/tasks/${selectedTask._id}`, payload);
+      } else {
+        await api.post('/tasks', payload);
+      }
 
       setOpen(false);
       setForm(initialForm);
+      setSelectedTask(null);
 
       await load();
     } catch (err) {
       setError(
-        err.response?.data?.message || 'Could not create task'
+        err.response?.data?.message ||
+          `Could not ${editMode ? 'update' : 'create'} task`
       );
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteClick = (task) => {
+    setDeletingTask(task);
+    setDeleteOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deletingTask) return;
+
+    setDeleting(true);
+    setError('');
+
+    try {
+      await api.delete(`/tasks/${deletingTask._id}`);
+      setDeleteOpen(false);
+      setDeletingTask(null);
+      await load();
+    } catch (err) {
+      setError(
+        err.response?.data?.message || 'Could not delete task'
+      );
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -156,9 +236,7 @@ export default function TasksPage() {
         spacing={2}
         sx={{ mb: 1 }}
       >
-        <Typography variant="h4">
-          Tasks
-        </Typography>
+        <Typography variant="h4">Tasks</Typography>
 
         {role === 'ADMIN' && (
           <Button
@@ -166,7 +244,6 @@ export default function TasksPage() {
             startIcon={<Add />}
             onClick={handleCreate}
             sx={{
-              alignSelf: { xs: 'stretch', sm: 'auto' },
               width: { xs: '100%', sm: 'auto' },
             }}
           >
@@ -175,10 +252,7 @@ export default function TasksPage() {
         )}
       </Stack>
 
-      <Typography
-        color="text.secondary"
-        sx={{ mb: 3 }}
-      >
+      <Typography color="text.secondary" sx={{ mb: 3 }}>
         Track assignments, priorities and deadlines.
       </Typography>
 
@@ -207,12 +281,19 @@ export default function TasksPage() {
                     {task.title}
                   </Typography>
 
+                  {task.description && (
+                    <Typography
+                      color="text.secondary"
+                      sx={{ mt: 0.5, overflowWrap: 'anywhere' }}
+                    >
+                      {task.description}
+                    </Typography>
+                  )}
+
                   <Typography
                     color="text.secondary"
-                    sx={{
-                      mt: 0.5,
-                      overflowWrap: 'anywhere',
-                    }}
+                    variant="body2"
+                    sx={{ mt: 0.5, overflowWrap: 'anywhere' }}
                   >
                     {task.project?.name || 'No project'} ·{' '}
                     {task.assignedTo?.name || 'Unassigned'} · Due{' '}
@@ -228,11 +309,9 @@ export default function TasksPage() {
                   alignItems="center"
                   flexWrap="wrap"
                   useFlexGap
+                  justifyContent={{ xs: 'flex-start', sm: 'flex-end' }}
                 >
-                  <Chip
-                    size="small"
-                    label={task.priority}
-                  />
+                  <Chip size="small" label={task.priority} />
 
                   {role === 'DEVELOPER' ? (
                     <TextField
@@ -242,10 +321,7 @@ export default function TasksPage() {
                       onChange={(event) =>
                         changeStatus(task, event.target.value)
                       }
-                      sx={{
-                        minWidth: { xs: 135, sm: 155 },
-                        flexGrow: { xs: 1, sm: 0 },
-                      }}
+                      sx={{ minWidth: 145 }}
                     >
                       {taskStatuses.map(([value, label]) => (
                         <MenuItem key={value} value={value}>
@@ -256,8 +332,32 @@ export default function TasksPage() {
                   ) : (
                     <Chip
                       size="small"
-                      label={task.status.replace('_', ' ')}
+                      label={(task.status || 'TODO').replaceAll('_', ' ')}
                     />
+                  )}
+
+                  {role === 'ADMIN' && (
+                    <Stack direction="row" spacing={0.5}>
+                      <Tooltip title="Edit task">
+                        <IconButton
+                          color="primary"
+                          onClick={() => handleEdit(task)}
+                          aria-label="Edit task"
+                        >
+                          <Edit />
+                        </IconButton>
+                      </Tooltip>
+
+                      <Tooltip title="Delete task">
+                        <IconButton
+                          color="error"
+                          onClick={() => handleDeleteClick(task)}
+                          aria-label="Delete task"
+                        >
+                          <Delete />
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
                   )}
                 </Stack>
               </Stack>
@@ -272,7 +372,7 @@ export default function TasksPage() {
         )}
       </Stack>
 
-      {/* Create task dialog */}
+      {/* Create / Edit task dialog */}
       <Dialog
         open={open}
         onClose={handleClose}
@@ -282,7 +382,7 @@ export default function TasksPage() {
       >
         <Box component="form" onSubmit={submit}>
           <DialogTitle>
-            Create task
+            {editMode ? 'Edit task' : 'Create task'}
           </DialogTitle>
 
           <DialogContent>
@@ -291,10 +391,7 @@ export default function TasksPage() {
                 label="Task title"
                 value={form.title}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
-                    title: event.target.value,
-                  })
+                  setForm({ ...form, title: event.target.value })
                 }
                 required
                 fullWidth
@@ -304,10 +401,7 @@ export default function TasksPage() {
                 label="Description"
                 value={form.description}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
-                    description: event.target.value,
-                  })
+                  setForm({ ...form, description: event.target.value })
                 }
                 multiline
                 minRows={2}
@@ -319,10 +413,7 @@ export default function TasksPage() {
                 label="Project"
                 value={form.project}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
-                    project: event.target.value,
-                  })
+                  setForm({ ...form, project: event.target.value })
                 }
                 required
                 fullWidth
@@ -339,10 +430,7 @@ export default function TasksPage() {
                 label="Assign developer"
                 value={form.assignedTo}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
-                    assignedTo: event.target.value,
-                  })
+                  setForm({ ...form, assignedTo: event.target.value })
                 }
                 required
                 fullWidth
@@ -361,10 +449,7 @@ export default function TasksPage() {
                 label="Priority"
                 value={form.priority}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
-                    priority: event.target.value,
-                  })
+                  setForm({ ...form, priority: event.target.value })
                 }
                 fullWidth
               >
@@ -376,14 +461,38 @@ export default function TasksPage() {
               </TextField>
 
               <TextField
+                select
+                label="Status"
+                value={form.status}
+                onChange={(event) =>
+                  setForm({ ...form, status: event.target.value })
+                }
+                fullWidth
+              >
+                {taskStatuses.map(([value, label]) => (
+                  <MenuItem key={value} value={value}>
+                    {label}
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              <TextField
+                label="Progress (%)"
+                type="number"
+                value={form.progress}
+                onChange={(event) =>
+                  setForm({ ...form, progress: event.target.value })
+                }
+                inputProps={{ min: 0, max: 100 }}
+                fullWidth
+              />
+
+              <TextField
                 label="Deadline"
                 type="datetime-local"
                 value={form.dueDate}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
-                    dueDate: event.target.value,
-                  })
+                  setForm({ ...form, dueDate: event.target.value })
                 }
                 InputLabelProps={{ shrink: true }}
                 required
@@ -392,16 +501,8 @@ export default function TasksPage() {
             </Stack>
           </DialogContent>
 
-          <DialogActions
-            sx={{
-              p: 2,
-              flexWrap: 'wrap',
-            }}
-          >
-            <Button
-              onClick={handleClose}
-              disabled={saving}
-            >
+          <DialogActions sx={{ p: 2, flexWrap: 'wrap' }}>
+            <Button onClick={handleClose} disabled={saving}>
               Cancel
             </Button>
 
@@ -411,13 +512,53 @@ export default function TasksPage() {
               disabled={
                 saving ||
                 !projects.length ||
-                !users.length
+                !users.some((user) => user.role === 'DEVELOPER')
               }
             >
-              {saving ? 'Creating…' : 'Create task'}
+              {saving
+                ? 'Saving…'
+                : editMode
+                  ? 'Save changes'
+                  : 'Create task'}
             </Button>
           </DialogActions>
         </Box>
+      </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={deleteOpen}
+        onClose={() => !deleting && setDeleteOpen(false)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Delete task?</DialogTitle>
+
+        <DialogContent>
+          <Typography color="text.secondary">
+            Are you sure you want to delete{' '}
+            <strong>{deletingTask?.title}</strong>? This action cannot be
+            undone.
+          </Typography>
+        </DialogContent>
+
+        <DialogActions sx={{ p: 2 }}>
+          <Button
+            onClick={() => setDeleteOpen(false)}
+            disabled={deleting}
+          >
+            Cancel
+          </Button>
+
+          <Button
+            color="error"
+            variant="contained"
+            onClick={handleDelete}
+            disabled={deleting}
+          >
+            {deleting ? 'Deleting…' : 'Delete'}
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );

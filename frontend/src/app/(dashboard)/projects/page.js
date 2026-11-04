@@ -22,9 +22,11 @@ import {
   InputLabel,
   Select,
   OutlinedInput,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
 
-import { Add } from '@mui/icons-material';
+import { Add, Edit, Delete } from '@mui/icons-material';
 
 import api from '../../../lib/api';
 
@@ -33,6 +35,8 @@ const initialForm = {
   description: '',
   status: 'PLANNING',
   members: [],
+  startDate: '',
+  endDate: '',
 };
 
 const projectStatuses = [
@@ -43,6 +47,13 @@ const projectStatuses = [
   'CANCELLED',
 ];
 
+const toDateInput = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+};
+
 export default function ProjectsPage() {
   const [items, setItems] = useState([]);
   const [users, setUsers] = useState([]);
@@ -50,21 +61,25 @@ export default function ProjectsPage() {
   const [role, setRole] = useState('DEVELOPER');
 
   const [open, setOpen] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletingProject, setDeletingProject] = useState(null);
+
   const [form, setForm] = useState(initialForm);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
-  const load = useCallback(() => {
-    return api
-      .get('/projects')
-      .then((response) => {
-        setItems(response.data.data);
-        setError('');
-      })
-      .catch((err) => {
-        setError(
-          err.response?.data?.message || 'Unable to load projects'
-        );
-      });
+  const load = useCallback(async () => {
+    try {
+      const response = await api.get('/projects');
+      setItems(response.data.data || []);
+      setError('');
+    } catch (err) {
+      setError(
+        err.response?.data?.message || 'Unable to load projects'
+      );
+    }
   }, []);
 
   useEffect(() => {
@@ -74,13 +89,12 @@ export default function ProjectsPage() {
       .get('/auth/me')
       .then((response) => {
         const currentRole = response.data.data.user.role;
-
         setRole(currentRole);
 
         if (currentRole === 'ADMIN') {
           api
             .get('/users')
-            .then((result) => setUsers(result.data.data))
+            .then((result) => setUsers(result.data.data || []))
             .catch(() => {});
         }
       })
@@ -88,42 +102,96 @@ export default function ProjectsPage() {
   }, [load]);
 
   const handleCreate = () => {
+    setEditMode(false);
+    setSelectedProject(null);
     setForm(initialForm);
     setError('');
     setOpen(true);
   };
 
+  const handleEdit = (project) => {
+    setEditMode(true);
+    setSelectedProject(project);
+
+    setForm({
+      name: project.name || '',
+      description: project.description || '',
+      status: project.status || 'PLANNING',
+      members: (project.members || []).map((member) =>
+        typeof member === 'string' ? member : member._id
+      ),
+      startDate: toDateInput(project.startDate),
+      endDate: toDateInput(project.endDate),
+    });
+
+    setError('');
+    setOpen(true);
+  };
+
   const handleClose = () => {
-    if (!saving) {
-      setOpen(false);
-    }
+    if (!saving) setOpen(false);
   };
 
   const submit = async (event) => {
     event.preventDefault();
-
     setSaving(true);
     setError('');
 
     try {
-      await api.post('/projects', form);
+      const payload = {
+        ...form,
+        startDate: form.startDate || undefined,
+        endDate: form.endDate || undefined,
+      };
+
+      if (editMode && selectedProject) {
+        await api.patch(`/projects/${selectedProject._id}`, payload);
+      } else {
+        await api.post('/projects', payload);
+      }
 
       setOpen(false);
       setForm(initialForm);
-
+      setSelectedProject(null);
       await load();
     } catch (err) {
       setError(
-        err.response?.data?.message || 'Could not create project'
+        err.response?.data?.message ||
+          `Could not ${editMode ? 'update' : 'create'} project`
       );
     } finally {
       setSaving(false);
     }
   };
 
+  const handleDeleteClick = (project) => {
+    setDeletingProject(project);
+    setDeleteOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deletingProject) return;
+
+    setDeleting(true);
+    setError('');
+
+    try {
+      await api.delete(`/projects/${deletingProject._id}`);
+      setDeleteOpen(false);
+      setDeletingProject(null);
+      await load();
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          'Could not delete project. Check whether it still has tasks.'
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <Box sx={{ width: '100%', minWidth: 0 }}>
-      {/* Responsive page header */}
       <Stack
         direction={{ xs: 'column', sm: 'row' }}
         justifyContent="space-between"
@@ -131,9 +199,7 @@ export default function ProjectsPage() {
         spacing={2}
         sx={{ mb: 1 }}
       >
-        <Typography variant="h4">
-          Projects
-        </Typography>
+        <Typography variant="h4">Projects</Typography>
 
         {role === 'ADMIN' && (
           <Button
@@ -141,7 +207,6 @@ export default function ProjectsPage() {
             startIcon={<Add />}
             onClick={handleCreate}
             sx={{
-              alignSelf: { xs: 'stretch', sm: 'auto' },
               width: { xs: '100%', sm: 'auto' },
             }}
           >
@@ -150,10 +215,7 @@ export default function ProjectsPage() {
         )}
       </Stack>
 
-      <Typography
-        color="text.secondary"
-        sx={{ mb: 3 }}
-      >
+      <Typography color="text.secondary" sx={{ mb: 3 }}>
         Your team's active work and delivery plans.
       </Typography>
 
@@ -163,7 +225,6 @@ export default function ProjectsPage() {
         </Alert>
       )}
 
-      {/* Project cards */}
       <Stack spacing={2}>
         {items.map((project) => (
           <Card key={project._id}>
@@ -171,7 +232,7 @@ export default function ProjectsPage() {
               <Stack
                 direction={{ xs: 'column', sm: 'row' }}
                 justifyContent="space-between"
-                alignItems={{ xs: 'flex-start', sm: 'center' }}
+                alignItems={{ xs: 'stretch', sm: 'center' }}
                 spacing={2}
               >
                 <Box sx={{ minWidth: 0, flex: 1 }}>
@@ -184,19 +245,58 @@ export default function ProjectsPage() {
 
                   <Typography
                     color="text.secondary"
-                    sx={{
-                      mt: 0.5,
-                      overflowWrap: 'anywhere',
-                    }}
+                    sx={{ mt: 0.5, overflowWrap: 'anywhere' }}
                   >
                     {project.description || 'No description provided'}
                   </Typography>
+
+                  {project.owner?.name && (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      display="block"
+                      sx={{ mt: 1 }}
+                    >
+                      Owner: {project.owner.name}
+                    </Typography>
+                  )}
                 </Box>
 
-                <Chip
-                  label={project.status.replace('_', ' ')}
-                  sx={{ flexShrink: 0 }}
-                />
+                <Stack
+                  direction="row"
+                  alignItems="center"
+                  spacing={1}
+                  justifyContent="space-between"
+                >
+                  <Chip
+                    label={(project.status || 'PLANNING').replaceAll('_', ' ')}
+                    size="small"
+                  />
+
+                  {role === 'ADMIN' && (
+                    <Stack direction="row" spacing={0.5}>
+                      <Tooltip title="Edit project">
+                        <IconButton
+                          color="primary"
+                          onClick={() => handleEdit(project)}
+                          aria-label="Edit project"
+                        >
+                          <Edit />
+                        </IconButton>
+                      </Tooltip>
+
+                      <Tooltip title="Delete project">
+                        <IconButton
+                          color="error"
+                          onClick={() => handleDeleteClick(project)}
+                          aria-label="Delete project"
+                        >
+                          <Delete />
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
+                  )}
+                </Stack>
               </Stack>
             </CardContent>
           </Card>
@@ -209,7 +309,7 @@ export default function ProjectsPage() {
         )}
       </Stack>
 
-      {/* Create project dialog */}
+      {/* Create / Edit project dialog */}
       <Dialog
         open={open}
         onClose={handleClose}
@@ -219,7 +319,7 @@ export default function ProjectsPage() {
       >
         <Box component="form" onSubmit={submit}>
           <DialogTitle>
-            Create project
+            {editMode ? 'Edit project' : 'Create project'}
           </DialogTitle>
 
           <DialogContent>
@@ -228,10 +328,7 @@ export default function ProjectsPage() {
                 label="Project name"
                 value={form.name}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
-                    name: event.target.value,
-                  })
+                  setForm({ ...form, name: event.target.value })
                 }
                 required
                 fullWidth
@@ -242,10 +339,7 @@ export default function ProjectsPage() {
                 label="Description"
                 value={form.description}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
-                    description: event.target.value,
-                  })
+                  setForm({ ...form, description: event.target.value })
                 }
                 multiline
                 minRows={3}
@@ -257,16 +351,13 @@ export default function ProjectsPage() {
                 label="Status"
                 value={form.status}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
-                    status: event.target.value,
-                  })
+                  setForm({ ...form, status: event.target.value })
                 }
                 fullWidth
               >
                 {projectStatuses.map((status) => (
                   <MenuItem key={status} value={status}>
-                    {status.replace('_', ' ')}
+                    {status.replaceAll('_', ' ')}
                   </MenuItem>
                 ))}
               </TextField>
@@ -281,20 +372,14 @@ export default function ProjectsPage() {
                   multiple
                   value={form.members}
                   onChange={(event) =>
-                    setForm({
-                      ...form,
-                      members: event.target.value,
-                    })
+                    setForm({ ...form, members: event.target.value })
                   }
-                  input={
-                    <OutlinedInput label="Project members" />
-                  }
+                  input={<OutlinedInput label="Project members" />}
                   renderValue={(selected) =>
                     selected
                       .map(
                         (id) =>
-                          users.find((user) => user._id === id)?.name ||
-                          id
+                          users.find((user) => user._id === id)?.name || id
                       )
                       .join(', ')
                   }
@@ -308,31 +393,85 @@ export default function ProjectsPage() {
                     ))}
                 </Select>
               </FormControl>
+
+              <TextField
+                label="Start date"
+                type="date"
+                value={form.startDate}
+                onChange={(event) =>
+                  setForm({ ...form, startDate: event.target.value })
+                }
+                InputLabelProps={{ shrink: true }}
+                fullWidth
+              />
+
+              <TextField
+                label="End date"
+                type="date"
+                value={form.endDate}
+                onChange={(event) =>
+                  setForm({ ...form, endDate: event.target.value })
+                }
+                InputLabelProps={{ shrink: true }}
+                inputProps={{
+                  min: form.startDate || undefined,
+                }}
+                fullWidth
+              />
             </Stack>
           </DialogContent>
 
-          <DialogActions
-            sx={{
-              p: 2,
-              flexWrap: 'wrap',
-            }}
-          >
-            <Button
-              onClick={handleClose}
-              disabled={saving}
-            >
+          <DialogActions sx={{ p: 2, flexWrap: 'wrap' }}>
+            <Button onClick={handleClose} disabled={saving}>
               Cancel
             </Button>
 
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={saving}
-            >
-              {saving ? 'Creating…' : 'Create project'}
+            <Button type="submit" variant="contained" disabled={saving}>
+              {saving
+                ? 'Saving…'
+                : editMode
+                  ? 'Save changes'
+                  : 'Create project'}
             </Button>
           </DialogActions>
         </Box>
+      </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={deleteOpen}
+        onClose={() => !deleting && setDeleteOpen(false)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Delete project?</DialogTitle>
+
+        <DialogContent>
+          <Typography color="text.secondary">
+            Are you sure you want to delete{' '}
+            <strong>{deletingProject?.name}</strong>? This action cannot be
+            undone. Projects with existing tasks may need those tasks moved
+            or deleted first.
+          </Typography>
+        </DialogContent>
+
+        <DialogActions sx={{ p: 2 }}>
+          <Button
+            onClick={() => setDeleteOpen(false)}
+            disabled={deleting}
+          >
+            Cancel
+          </Button>
+
+          <Button
+            color="error"
+            variant="contained"
+            onClick={handleDelete}
+            disabled={deleting}
+          >
+            {deleting ? 'Deleting…' : 'Delete'}
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );
