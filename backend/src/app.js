@@ -14,48 +14,92 @@ const app = express();
 
 app.disable('x-powered-by');
 
-// Allowed frontend origins
+// --------------------------------------------------
+// CORS: Allowed frontend origins
+// --------------------------------------------------
+
+const normalizeOrigin = (value) => {
+  try {
+    return new URL(value.trim()).origin;
+  } catch {
+    return null;
+  }
+};
+
 const allowedOrigins = (
   process.env.CLIENT_ORIGIN || 'http://localhost:3000'
 )
   .split(',')
-  .map((origin) => origin.trim())
+  .map(normalizeOrigin)
   .filter(Boolean);
 
-// Security headers
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests without an Origin header
+    // (e.g. server-to-server requests).
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    const normalizedOrigin = normalizeOrigin(origin);
+
+    if (normalizedOrigin && allowedOrigins.includes(normalizedOrigin)) {
+      return callback(null, true);
+    }
+
+    console.error(`CORS blocked request from origin: ${origin}`);
+
+    // Do not send CORS headers to unauthorized origins.
+    return callback(null, false);
+  },
+
+  credentials: true,
+
+  methods: [
+    'GET',
+    'POST',
+    'PUT',
+    'PATCH',
+    'DELETE',
+    'OPTIONS',
+  ],
+
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+  ],
+
+  optionsSuccessStatus: 204,
+  maxAge: 86400,
+};
+
+// --------------------------------------------------
+// Security middleware
+// --------------------------------------------------
+
 app.use(helmet());
 
-// CORS configuration
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests without an Origin header (e.g. server-to-server)
-      if (!origin) {
-        return callback(null, true);
-      }
+// CORS middleware must execute before API routes.
+app.use(cors(corsOptions));
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      console.error(`CORS blocked request from origin: ${origin}`);
-
-      return callback(new Error('Not allowed by CORS'));
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    optionsSuccessStatus: 204,
-  })
-);
-
+// --------------------------------------------------
 // Request middleware
+// --------------------------------------------------
+
 app.use(compression());
-app.use(express.json({ limit: '1mb' }));
+
+app.use(express.json({
+  limit: '1mb',
+}));
+
 app.use(cookieParser());
+
 app.use(pinoHttp());
 
+// --------------------------------------------------
 // Authentication rate limiter
+// --------------------------------------------------
+
 app.use(
   '/api/v1/auth',
   rateLimit({
@@ -66,19 +110,29 @@ app.use(
   })
 );
 
+// --------------------------------------------------
 // Health check
+// --------------------------------------------------
+
 app.get('/health', (_req, res) => {
-  res.json({
+  res.status(200).json({
     status: 'ok',
     service: 'teamflow-api',
   });
 });
 
+// --------------------------------------------------
 // API routes
+// --------------------------------------------------
+
 app.use('/api/v1', routes);
 
+// --------------------------------------------------
 // Error handling
+// --------------------------------------------------
+
 app.use(notFound);
+
 app.use(errorHandler);
 
 export default app;
