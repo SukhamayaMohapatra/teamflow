@@ -1,3 +1,4 @@
+
 import { Router } from 'express';
 
 import {
@@ -18,80 +19,144 @@ import { authorize } from '../middleware/authorize.js';
 
 const router = Router();
 
-// Authentication routes
+/*
+|--------------------------------------------------------------------------
+| Authentication routes
+|--------------------------------------------------------------------------
+*/
+
+// Public login route
 router.post('/auth/login', login);
+
+// Protected authentication routes
 router.post('/auth/logout', authenticate, logout);
 router.get('/auth/me', authenticate, me);
 
-// Admin-only user creation
-router.post(
-  '/users',
-  authenticate,
-  authorize('ADMIN'),
-  createUser
-);
+/*
+|--------------------------------------------------------------------------
+| Protected routes
+|--------------------------------------------------------------------------
+*/
 
 // All routes below require authentication.
 router.use(authenticate);
 
-// User routes
+/*
+|--------------------------------------------------------------------------
+| User routes
+|--------------------------------------------------------------------------
+*/
+
+// Admin can create users
+router.post(
+  '/users',
+  authorize('ADMIN'),
+  createUser
+);
+
+// Admin can view active users
 router.get(
   '/users',
   authorize('ADMIN'),
   listUsers
 );
 
-// Project routes
-router.get('/projects', projects.listProjects);
+/*
+|--------------------------------------------------------------------------
+| Project routes
+|--------------------------------------------------------------------------
+*/
 
+// View projects
+router.get(
+  '/projects',
+  projects.listProjects
+);
+
+// Create project - Admin only
 router.post(
   '/projects',
   authorize('ADMIN'),
   projects.createProject
 );
 
-router.get('/projects/:id', projects.getProject);
+// View individual project
+router.get(
+  '/projects/:id',
+  projects.getProject
+);
 
+// Edit project - Admin only
 router.patch(
   '/projects/:id',
   authorize('ADMIN'),
   projects.updateProject
 );
 
+// Delete project - Admin only
 router.delete(
   '/projects/:id',
   authorize('ADMIN'),
   projects.deleteProject
 );
 
-// Task routes
-router.get('/tasks', tasks.listTasks);
+/*
+|--------------------------------------------------------------------------
+| Task routes
+|--------------------------------------------------------------------------
+*/
 
+// View tasks
+router.get(
+  '/tasks',
+  tasks.listTasks
+);
+
+// Create task - Admin only
 router.post(
   '/tasks',
   authorize('ADMIN'),
   tasks.createTask
 );
 
-router.get('/tasks/:id', tasks.getTask);
+// View individual task
+router.get(
+  '/tasks/:id',
+  tasks.getTask
+);
 
-// Developers can update their own task progress.
-// The controller restricts which fields they can change.
-router.patch('/tasks/:id', tasks.updateTask);
+// Update task
+// Admin can update all fields.
+// Developers can update their own task progress/status.
+// Field-level permissions are handled inside task.controller.js.
+router.patch(
+  '/tasks/:id',
+  tasks.updateTask
+);
 
+// Add task update/history entry
 router.post(
   '/tasks/:id/updates',
   tasks.addTaskUpdate
 );
 
-// Only Admin can delete tasks.
+// Delete task - Admin only
 router.delete(
   '/tasks/:id',
   authorize('ADMIN'),
   tasks.deleteTask
 );
 
-// Dashboard
-router.get('/dashboard/summary', summary);
+/*
+|--------------------------------------------------------------------------
+| Dashboard routes
+|--------------------------------------------------------------------------
+*/
+
+// Dashboard summary
+router.get(
+  '/dashboard/summary',
+  summary
+);
 
 export default router;

@@ -24,6 +24,8 @@ import {
   OutlinedInput,
   IconButton,
   Tooltip,
+  Checkbox,
+  ListItemText,
 } from '@mui/material';
 
 import { Add, Edit, Delete } from '@mui/icons-material';
@@ -104,7 +106,7 @@ export default function ProjectsPage() {
   const handleCreate = () => {
     setEditMode(false);
     setSelectedProject(null);
-    setForm(initialForm);
+    setForm({ ...initialForm, members: [] });
     setError('');
     setOpen(true);
   };
@@ -117,9 +119,11 @@ export default function ProjectsPage() {
       name: project.name || '',
       description: project.description || '',
       status: project.status || 'PLANNING',
-      members: (project.members || []).map((member) =>
-        typeof member === 'string' ? member : member._id
-      ),
+      members: (project.members || [])
+        .map((member) =>
+          typeof member === 'string' ? member : member?._id
+        )
+        .filter(Boolean),
       startDate: toDateInput(project.startDate),
       endDate: toDateInput(project.endDate),
     });
@@ -140,6 +144,7 @@ export default function ProjectsPage() {
     try {
       const payload = {
         ...form,
+        members: [...new Set(form.members)],
         startDate: form.startDate || undefined,
         endDate: form.endDate || undefined,
       };
@@ -206,9 +211,7 @@ export default function ProjectsPage() {
             variant="contained"
             startIcon={<Add />}
             onClick={handleCreate}
-            sx={{
-              width: { xs: '100%', sm: 'auto' },
-            }}
+            sx={{ width: { xs: '100%', sm: 'auto' } }}
           >
             New project
           </Button>
@@ -309,7 +312,6 @@ export default function ProjectsPage() {
         )}
       </Stack>
 
-      {/* Create / Edit project dialog */}
       <Dialog
         open={open}
         onClose={handleClose}
@@ -364,34 +366,49 @@ export default function ProjectsPage() {
 
               <FormControl fullWidth>
                 <InputLabel id="project-members-label">
-                  Project members
+                  Project members (optional)
                 </InputLabel>
 
                 <Select
                   labelId="project-members-label"
                   multiple
                   value={form.members}
-                  onChange={(event) =>
-                    setForm({ ...form, members: event.target.value })
-                  }
-                  input={<OutlinedInput label="Project members" />}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setForm({
+                      ...form,
+                      members: typeof value === 'string'
+                        ? value.split(',')
+                        : value,
+                    });
+                  }}
+                  input={<OutlinedInput label="Project members (optional)" />}
                   renderValue={(selected) =>
                     selected
-                      .map(
-                        (id) =>
-                          users.find((user) => user._id === id)?.name || id
+                      .map((id) =>
+                        users.find((user) => user._id === id)?.name || id
                       )
                       .join(', ')
                   }
                 >
-                  {users
-                    .filter((user) => user.role === 'DEVELOPER')
-                    .map((user) => (
-                      <MenuItem key={user._id} value={user._id}>
-                        {user.name} ({user.email})
-                      </MenuItem>
-                    ))}
+                  {users.map((user) => (
+                    <MenuItem key={user._id} value={user._id}>
+                      <Checkbox checked={form.members.includes(user._id)} />
+                      <ListItemText
+                        primary={user.name}
+                        secondary={`${user.email} • ${user.role}`}
+                      />
+                    </MenuItem>
+                  ))}
                 </Select>
+
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mt: 0.5 }}
+                >
+                  Select developers and/or admin. No member is selected automatically.
+                </Typography>
               </FormControl>
 
               <TextField
@@ -413,9 +430,7 @@ export default function ProjectsPage() {
                   setForm({ ...form, endDate: event.target.value })
                 }
                 InputLabelProps={{ shrink: true }}
-                inputProps={{
-                  min: form.startDate || undefined,
-                }}
+                inputProps={{ min: form.startDate || undefined }}
                 fullWidth
               />
             </Stack>
@@ -437,7 +452,6 @@ export default function ProjectsPage() {
         </Box>
       </Dialog>
 
-      {/* Delete confirmation dialog */}
       <Dialog
         open={deleteOpen}
         onClose={() => !deleting && setDeleteOpen(false)}

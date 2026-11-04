@@ -1,4 +1,6 @@
+
 import { z } from 'zod';
+
 import Project from '../models/Project.js';
 import Task from '../models/Task.js';
 import User from '../models/User.js';
@@ -12,7 +14,6 @@ const projectStatuses = [
   'CANCELLED',
 ];
 
-// Accept empty dates as undefined; otherwise convert them to Date objects.
 const optionalDate = z.preprocess(
   (value) => (value === '' || value === null ? undefined : value),
   z.coerce.date().optional()
@@ -27,12 +28,25 @@ const projectInput = z.object({
   endDate: optionalDate,
 });
 
-const validateProjectDates = (startDate, endDate) => {
-  if (startDate && endDate && endDate < startDate) {
-    return false;
-  }
+const validateProjectDates = (startDate, endDate) =>
+  !(startDate && endDate && endDate < startDate);
 
-  return true;
+// Members are optional. The owner is stored separately and is not
+// automatically inserted into members.
+const getActiveProjectMembers = async (memberIds) => {
+  const uniqueIds = [...new Set(memberIds || [])];
+
+  if (!uniqueIds.length) return [];
+
+  const activeUsers = await User.find({
+    _id: { $in: uniqueIds },
+    role: { $in: ['ADMIN', 'DEVELOPER'] },
+    isActive: true,
+  }).select('_id');
+
+  if (activeUsers.length !== uniqueIds.length) return null;
+
+  return activeUsers.map((user) => String(user._id));
 };
 
 // List projects
@@ -75,28 +89,14 @@ export const createProject = asyncHandler(async (req, res) => {
     });
   }
 
-  const requestedMembers = [...new Set(data.members || [])];
+  const members = await getActiveProjectMembers(data.members || []);
 
-  // Only active developers can be added as project members.
-  const developers = await User.find({
-    _id: { $in: requestedMembers },
-    role: 'DEVELOPER',
-    isActive: true,
-  }).select('_id');
-
-  if (developers.length !== requestedMembers.length) {
+  if (members === null) {
     return res.status(400).json({
       success: false,
       message: 'One or more selected members are invalid or inactive',
     });
   }
-
-  const members = [
-    ...new Set([
-      ...requestedMembers,
-      String(req.user._id),
-    ]),
-  ];
 
   const project = await Project.create({
     ...data,
@@ -128,9 +128,7 @@ export const getProject = asyncHandler(async (req, res) => {
 
   if (
     req.user.role !== 'ADMIN' &&
-    !project.members.some((member) =>
-      member._id.equals(req.user._id)
-    )
+    !project.members.some((member) => member._id.equals(req.user._id))
   ) {
     return res.status(403).json({
       success: false,
@@ -167,7 +165,6 @@ export const updateProject = asyncHandler(async (req, res) => {
 
   const updates = parsed.data;
 
-  // Validate the final dates, including unchanged existing dates.
   const nextStartDate =
     updates.startDate !== undefined
       ? updates.startDate
@@ -185,30 +182,15 @@ export const updateProject = asyncHandler(async (req, res) => {
     });
   }
 
-  // Validate selected project members.
   if (updates.members !== undefined) {
-    const requestedMembers = [...new Set(updates.members)];
+    const nextMembers = await getActiveProjectMembers(updates.members);
 
-    const developers = await User.find({
-      _id: { $in: requestedMembers },
-      role: 'DEVELOPER',
-      isActive: true,
-    }).select('_id');
-
-    if (developers.length !== requestedMembers.length) {
+    if (nextMembers === null) {
       return res.status(400).json({
         success: false,
         message: 'One or more selected members are invalid or inactive',
       });
     }
-
-    // Keep the project owner as a member.
-    const nextMembers = [
-      ...new Set([
-        ...requestedMembers,
-        String(project.owner),
-      ]),
-    ];
 
     // Do not remove a developer who still owns tasks in this project.
     const assignedUsers = await Task.distinct('assignedTo', {
@@ -256,7 +238,6 @@ export const deleteProject = asyncHandler(async (req, res) => {
     });
   }
 
-  // Do not delete a project while it still contains tasks.
   const taskCount = await Task.countDocuments({
     project: project._id,
   });

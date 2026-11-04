@@ -20,6 +20,10 @@ import {
   MenuItem,
   IconButton,
   Tooltip,
+  FormControl,
+  InputLabel,
+  Select,
+  OutlinedInput,
 } from '@mui/material';
 
 import { Add, Edit, Delete } from '@mui/icons-material';
@@ -63,6 +67,13 @@ export default function TasksPage() {
   const [items, setItems] = useState([]);
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
+
+  const [filters, setFilters] = useState({
+    project: '',
+    priority: '',
+    status: '',
+    assignedTo: '',
+  });
 
   const [role, setRole] = useState('DEVELOPER');
   const [error, setError] = useState('');
@@ -226,9 +237,35 @@ export default function TasksPage() {
     }
   };
 
+  const filteredItems = items.filter((task) => {
+    const projectId =
+      typeof task.project === 'string' ? task.project : task.project?._id;
+
+    const assignedId =
+      typeof task.assignedTo === 'string'
+        ? task.assignedTo
+        : task.assignedTo?._id;
+
+    return (
+      (!filters.project || projectId === filters.project) &&
+      (!filters.priority || task.priority === filters.priority) &&
+      (!filters.status || task.status === filters.status) &&
+      (!filters.assignedTo || assignedId === filters.assignedTo)
+    );
+  });
+
+  const hasActiveFilters = Object.values(filters).some(Boolean);
+
+  const clearFilters = () =>
+    setFilters({
+      project: '',
+      priority: '',
+      status: '',
+      assignedTo: '',
+    });
+
   return (
     <Box sx={{ width: '100%', minWidth: 0 }}>
-      {/* Responsive page header */}
       <Stack
         direction={{ xs: 'column', sm: 'row' }}
         justifyContent="space-between"
@@ -243,9 +280,7 @@ export default function TasksPage() {
             variant="contained"
             startIcon={<Add />}
             onClick={handleCreate}
-            sx={{
-              width: { xs: '100%', sm: 'auto' },
-            }}
+            sx={{ width: { xs: '100%', sm: 'auto' } }}
           >
             New task
           </Button>
@@ -256,15 +291,149 @@ export default function TasksPage() {
         Track assignments, priorities and deadlines.
       </Typography>
 
+      <Card sx={{ mb: 3 }}>
+        <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
+          <Stack spacing={2}>
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              alignItems={{ xs: 'stretch', sm: 'center' }}
+              justifyContent="space-between"
+              spacing={1}
+            >
+              <Typography variant="subtitle1" fontWeight={600}>
+                Filter tasks
+              </Typography>
+
+              <Button
+                size="small"
+                onClick={clearFilters}
+                disabled={!hasActiveFilters}
+                sx={{ alignSelf: { xs: 'flex-start', sm: 'auto' } }}
+              >
+                Clear filters
+              </Button>
+            </Stack>
+
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: {
+                  xs: '1fr',
+                  sm: 'repeat(2, minmax(0, 1fr))',
+                  lg: 'repeat(4, minmax(0, 1fr))',
+                },
+                gap: 2,
+              }}
+            >
+              <FormControl fullWidth size="small">
+                <InputLabel id="task-filter-project">Project</InputLabel>
+                <Select
+                  labelId="task-filter-project"
+                  value={filters.project}
+                  onChange={(event) =>
+                    setFilters((current) => ({
+                      ...current,
+                      project: event.target.value,
+                    }))
+                  }
+                  input={<OutlinedInput label="Project" />}
+                >
+                  <MenuItem value="">All projects</MenuItem>
+                  {projects.map((project) => (
+                    <MenuItem key={project._id} value={project._id}>
+                      {project.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <FormControl fullWidth size="small">
+                <InputLabel id="task-filter-priority">Priority</InputLabel>
+                <Select
+                  labelId="task-filter-priority"
+                  value={filters.priority}
+                  onChange={(event) =>
+                    setFilters((current) => ({
+                      ...current,
+                      priority: event.target.value,
+                    }))
+                  }
+                  input={<OutlinedInput label="Priority" />}
+                >
+                  <MenuItem value="">All priorities</MenuItem>
+                  {priorities.map((priority) => (
+                    <MenuItem key={priority} value={priority}>
+                      {priority}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <FormControl fullWidth size="small">
+                <InputLabel id="task-filter-status">Status</InputLabel>
+                <Select
+                  labelId="task-filter-status"
+                  value={filters.status}
+                  onChange={(event) =>
+                    setFilters((current) => ({
+                      ...current,
+                      status: event.target.value,
+                    }))
+                  }
+                  input={<OutlinedInput label="Status" />}
+                >
+                  <MenuItem value="">All statuses</MenuItem>
+                  {taskStatuses.map(([value, label]) => (
+                    <MenuItem key={value} value={value}>
+                      {label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <FormControl fullWidth size="small">
+                <InputLabel id="task-filter-assignee">
+                  Assigned developer
+                </InputLabel>
+                <Select
+                  labelId="task-filter-assignee"
+                  value={filters.assignedTo}
+                  onChange={(event) =>
+                    setFilters((current) => ({
+                      ...current,
+                      assignedTo: event.target.value,
+                    }))
+                  }
+                  input={<OutlinedInput label="Assigned developer" />}
+                >
+                  <MenuItem value="">All developers</MenuItem>
+                  {users
+                    .filter((user) => user.role === 'DEVELOPER')
+                    .map((user) => (
+                      <MenuItem key={user._id} value={user._id}>
+                        {user.name}
+                      </MenuItem>
+                    ))}
+                </Select>
+              </FormControl>
+            </Box>
+
+            <Typography variant="caption" color="text.secondary">
+              Filters work together. Showing {filteredItems.length} of{' '}
+              {items.length} task(s).
+            </Typography>
+          </Stack>
+        </CardContent>
+      </Card>
+
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
       )}
 
-      {/* Task cards */}
       <Stack spacing={2}>
-        {items.map((task) => (
+        {filteredItems.map((task) => (
           <Card key={task._id}>
             <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
               <Stack
@@ -365,14 +534,15 @@ export default function TasksPage() {
           </Card>
         ))}
 
-        {!items.length && !error && (
+        {!filteredItems.length && !error && (
           <Typography color="text.secondary">
-            No tasks found.
+            {items.length
+              ? 'No tasks match the selected filters.'
+              : 'No tasks found.'}
           </Typography>
         )}
       </Stack>
 
-      {/* Create / Edit task dialog */}
       <Dialog
         open={open}
         onClose={handleClose}
@@ -525,7 +695,6 @@ export default function TasksPage() {
         </Box>
       </Dialog>
 
-      {/* Delete confirmation dialog */}
       <Dialog
         open={deleteOpen}
         onClose={() => !deleting && setDeleteOpen(false)}
