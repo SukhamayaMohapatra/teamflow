@@ -185,12 +185,14 @@ export default function DashboardLayout({ children }) {
 
       <Box
         component="main"
-        sx={{
-          ml: { sm: '240px' },
-          pt: 10,
-          p: { xs: 2, sm: 3, md: 4 },
-          maxWidth: 1600,
-        }}
+         sx={{
+        ml: { sm: '240px' },
+        p: { xs: 2, sm: 3, md: 4 },
+        pt: { xs: 12, sm: 14, md: 14 },
+        maxWidth: 1600,
+        boxSizing: 'border-box',
+        minHeight: '100vh'
+      }}
       >
         {children}
       </Box>
