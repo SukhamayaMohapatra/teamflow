@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -17,7 +16,12 @@ import {
   ListItemText,
   Avatar,
   Stack,
+  IconButton,
+  useMediaQuery,
+  CircularProgress,
 } from '@mui/material';
+
+import { useTheme } from '@mui/material/styles';
 
 import {
   Dashboard,
@@ -25,9 +29,12 @@ import {
   Checklist,
   Groups,
   Logout,
+  Menu as MenuIcon,
 } from '@mui/icons-material';
 
 import api from '../../lib/api';
+
+const DRAWER_WIDTH = 240;
 
 const nav = [
   ['Dashboard', '/dashboard', Dashboard],
@@ -39,9 +46,13 @@ const nav = [
 export default function DashboardLayout({ children }) {
   const router = useRouter();
   const path = usePathname();
+  const theme = useTheme();
+
+  const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
 
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -69,6 +80,10 @@ export default function DashboardLayout({ children }) {
     };
   }, [router]);
 
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [path]);
+
   const logout = async () => {
     try {
       await api.post('/auth/logout');
@@ -76,6 +91,54 @@ export default function DashboardLayout({ children }) {
       router.replace('/login');
     }
   };
+
+  const handleNavigation = (url) => {
+    router.push(url);
+    setMobileOpen(false);
+  };
+
+  const drawerContent = (
+    <Box sx={{ pt: { xs: 2, md: 9 }, px: 1.5 }}>
+      <Typography
+        variant="overline"
+        color="text.secondary"
+        sx={{ px: 2, py: 1 }}
+      >
+        WORKSPACE
+      </Typography>
+
+      <List>
+        {nav
+          .filter(([label]) => label !== 'Team' || user?.role === 'ADMIN')
+          .map(([label, url, Icon]) => (
+            <ListItemButton
+              key={url}
+              selected={path.startsWith(url)}
+              onClick={() => handleNavigation(url)}
+              sx={{
+                borderRadius: 2,
+                mb: 0.5,
+                minHeight: 48,
+                '&.Mui-selected': {
+                  bgcolor: 'rgba(79,70,229,0.09)',
+                  '&:hover': {
+                    bgcolor: 'rgba(79,70,229,0.14)',
+                  },
+                },
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 42 }}>
+                <Icon
+                  color={path.startsWith(url) ? 'primary' : 'action'}
+                />
+              </ListItemIcon>
+
+              <ListItemText primary={label} />
+            </ListItemButton>
+          ))}
+      </List>
+    </Box>
+  );
 
   if (!ready || !user) {
     return (
@@ -86,7 +149,7 @@ export default function DashboardLayout({ children }) {
           placeItems: 'center',
         }}
       >
-        Loading workspace…
+        <CircularProgress />
       </Box>
     );
   }
@@ -99,21 +162,52 @@ export default function DashboardLayout({ children }) {
         elevation={0}
         sx={{
           borderBottom: '1px solid #E9ECF3',
-          zIndex: 1201,
+          zIndex: theme.zIndex.drawer + 1,
         }}
       >
-        <Toolbar sx={{ pl: { sm: '264px !important' } }}>
+        <Toolbar
+          sx={{
+            minHeight: { xs: 64, sm: 72 },
+            px: { xs: 1.5, sm: 3 },
+            pl: {
+              xs: 1.5,
+              md: `${DRAWER_WIDTH + 32}px`,
+            },
+          }}
+        >
+          {!isDesktop && (
+            <IconButton
+              edge="start"
+              color="inherit"
+              aria-label="open navigation menu"
+              onClick={() => setMobileOpen(true)}
+              sx={{ mr: 1 }}
+            >
+              <MenuIcon />
+            </IconButton>
+          )}
+
           <Typography
             fontWeight={850}
             color="primary"
-            sx={{ flexGrow: 1 }}
+            sx={{
+              flexGrow: 1,
+              fontSize: { xs: '1.05rem', sm: '1.25rem' },
+              letterSpacing: '-0.03em',
+            }}
           >
             TEAMFLOW
           </Typography>
 
-          <Stack direction="row" spacing={1.5} alignItems="center">
-            <Avatar sx={{ width: 34, height: 34, bgcolor: 'primary.main' }}>
-              {user.name?.[0]}
+          <Stack direction="row" spacing={{ xs: 1, sm: 1.5 }} alignItems="center">
+            <Avatar
+              sx={{
+                width: { xs: 32, sm: 38 },
+                height: { xs: 32, sm: 38 },
+                bgcolor: 'primary.main',
+              }}
+            >
+              {user.name?.[0]?.toUpperCase()}
             </Avatar>
 
             <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
@@ -128,71 +222,86 @@ export default function DashboardLayout({ children }) {
 
             <Button
               onClick={logout}
-              startIcon={<Logout />}
               color="inherit"
+              startIcon={<Logout />}
+              sx={{
+                minWidth: { xs: 40, sm: 'auto' },
+                px: { xs: 1, sm: 2 },
+                '& .MuiButton-startIcon': {
+                  mr: { xs: 0, sm: 1 },
+                },
+              }}
             >
-              Logout
+              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                Logout
+              </Box>
             </Button>
           </Stack>
         </Toolbar>
       </AppBar>
 
-      <Drawer
-        variant="permanent"
-        sx={{
-          width: 240,
-          flexShrink: 0,
-          '& .MuiDrawer-paper': {
-            width: 240,
-            boxSizing: 'border-box',
-            borderRight: '1px solid #E9ECF3',
-            pt: 9,
-            px: 1.5,
-          },
-        }}
-      >
-        <Typography
-          variant="overline"
-          color="text.secondary"
-          sx={{ px: 2, py: 1 }}
+      {/* Desktop sidebar */}
+      {isDesktop && (
+        <Drawer
+          variant="permanent"
+          sx={{
+            width: DRAWER_WIDTH,
+            flexShrink: 0,
+            '& .MuiDrawer-paper': {
+              width: DRAWER_WIDTH,
+              boxSizing: 'border-box',
+              borderRight: '1px solid #E9ECF3',
+              pt: 0,
+              top: { md: 72 },
+              height: { md: 'calc(100% - 72px)' },
+            },
+          }}
         >
-          WORKSPACE
-        </Typography>
+          {drawerContent}
+        </Drawer>
+      )}
 
-        <List>
-          {nav
-            .filter(
-              ([label]) => label !== 'Team' || user.role === 'ADMIN'
-            )
-            .map(([label, url, Icon]) => (
-              <ListItemButton
-                key={url}
-                selected={path.startsWith(url)}
-                onClick={() => router.push(url)}
-                sx={{ borderRadius: 2, mb: 0.5 }}
-              >
-                <ListItemIcon sx={{ minWidth: 38 }}>
-                  <Icon
-                    color={path.startsWith(url) ? 'primary' : 'action'}
-                  />
-                </ListItemIcon>
-
-                <ListItemText primary={label} />
-              </ListItemButton>
-            ))}
-        </List>
-      </Drawer>
+      {/* Mobile and tablet sidebar */}
+      {!isDesktop && (
+        <Drawer
+          variant="temporary"
+          open={mobileOpen}
+          onClose={() => setMobileOpen(false)}
+          ModalProps={{ keepMounted: true }}
+          sx={{
+            '& .MuiDrawer-paper': {
+              width: DRAWER_WIDTH,
+              boxSizing: 'border-box',
+              borderRight: '1px solid #E9ECF3',
+            },
+          }}
+        >
+          {drawerContent}
+        </Drawer>
+      )}
 
       <Box
         component="main"
-         sx={{
-        ml: { sm: '240px' },
-        p: { xs: 2, sm: 3, md: 4 },
-        pt: { xs: 12, sm: 14, md: 14 },
-        maxWidth: 1600,
-        boxSizing: 'border-box',
-        minHeight: '100vh'
-      }}
+        sx={{
+          ml: { xs: 0, md: `${DRAWER_WIDTH}px` },
+          width: {
+            xs: '100%',
+            md: `calc(100% - ${DRAWER_WIDTH}px)`,
+          },
+          p: {
+            xs: 2,
+            sm: 3,
+            md: 4,
+          },
+          pt: {
+            xs: '88px',
+            sm: '104px',
+            md: '112px',
+          },
+          maxWidth: 1840,
+          boxSizing: 'border-box',
+          minHeight: '100vh',
+        }}
       >
         {children}
       </Box>

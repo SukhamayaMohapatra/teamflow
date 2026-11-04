@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -73,41 +72,62 @@ export default function DashboardPage() {
     : [];
 
   return (
-    <Box>
-      <Typography variant="h4">Dashboard</Typography>
+    <Box sx={{ width: '100%', minWidth: 0 }}>
+      <Typography variant="h4">
+        Dashboard
+      </Typography>
 
       <Typography
         color="text.secondary"
-        sx={{ mt: 1, mb: 3 }}
+        sx={{
+          mt: 1,
+          mb: { xs: 2.5, sm: 3 },
+        }}
       >
         Here's an overview of your team's delivery.
       </Typography>
 
-      <Grid container spacing={2}>
+      {/* Dashboard metric cards */}
+      <Grid container spacing={{ xs: 1.5, sm: 2 }}>
         {metrics.map(([label, key, Icon]) => (
           <Grid
+            key={key}
             size={{
               xs: 12,
               sm: 6,
               lg: key === 'overdueTasks' ? 12 : 3,
             }}
-            key={key}
           >
-            <Card>
-              <CardContent>
+            <Card sx={{ height: '100%' }}>
+              <CardContent
+                sx={{
+                  p: { xs: 2, sm: 2.5 },
+                  '&:last-child': {
+                    pb: { xs: 2, sm: 2.5 },
+                  },
+                }}
+              >
                 <Stack
                   direction="row"
                   justifyContent="space-between"
                   alignItems="center"
+                  spacing={1}
                 >
-                  <Typography color="text.secondary" variant="body2">
+                  <Typography
+                    color="text.secondary"
+                    variant="body2"
+                    sx={{ minWidth: 0 }}
+                  >
                     {label}
                   </Typography>
 
                   <Icon color="primary" />
                 </Stack>
 
-                <Typography variant="h4" sx={{ mt: 2 }}>
+                <Typography
+                  variant="h4"
+                  sx={{ mt: 2 }}
+                >
                   {data[key] ?? 0}
                 </Typography>
               </CardContent>
@@ -116,13 +136,14 @@ export default function DashboardPage() {
         ))}
       </Grid>
 
-      <Card sx={{ mt: 3 }}>
-        <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>
+      {/* Project progress */}
+      <Card sx={{ mt: { xs: 2.5, sm: 3 } }}>
+        <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+          <Typography variant="h6" sx={{ mb: 2.5 }}>
             Project progress
           </Typography>
 
-          <Stack spacing={2.5}>
+          <Stack spacing={{ xs: 2.5, sm: 3 }}>
             {projectProgress.map((project) => {
               const progress = Math.min(
                 100,
@@ -130,14 +151,21 @@ export default function DashboardPage() {
               );
 
               return (
-                <Box key={project.id}>
+                <Box key={project.id} sx={{ minWidth: 0 }}>
                   <Stack
                     direction="row"
                     justifyContent="space-between"
+                    alignItems="flex-start"
+                    spacing={1}
                     sx={{ mb: 1 }}
                   >
-                    <Box>
-                      <Typography fontWeight={700}>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography
+                        fontWeight={700}
+                        sx={{
+                          overflowWrap: 'anywhere',
+                        }}
+                      >
                         {project.name}
                       </Typography>
 
@@ -145,20 +173,25 @@ export default function DashboardPage() {
                         variant="caption"
                         color="text.secondary"
                       >
-                        {project.completed ?? 0} of {project.total ?? 0} tasks completed
+                        {project.completed ?? 0} of {project.total ?? 0}{' '}
+                        tasks completed
                       </Typography>
                     </Box>
 
                     <Chip
                       size="small"
                       label={`${progress}%`}
+                      sx={{ flexShrink: 0 }}
                     />
                   </Stack>
 
                   <LinearProgress
                     variant="determinate"
                     value={progress}
-                    sx={{ height: 8, borderRadius: 8 }}
+                    sx={{
+                      height: 8,
+                      borderRadius: 8,
+                    }}
                   />
                 </Box>
               );
